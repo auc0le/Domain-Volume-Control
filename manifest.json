@@ -1,0 +1,27 @@
+// manifest.json
+{
+  "manifest_version": 2,
+  "name": "Domain Volume Control",
+  "version": "1.0",
+  "description": "Control and remember volume settings per domain",
+  "permissions": [
+    "storage",
+    "tabs",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.svg"
+  },
+  "icons": {
+    "48": "icon.svg"
+  }
+}

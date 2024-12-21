@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .volume-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .slider {
+      flex: 1;
+    }
+    #volumeValue {
+      min-width: 3em;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <h3>Domain Volume Control</h3>
+  <div class="volume-control">
+    <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="100">
+    <span id="volumeValue">100%</span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
