@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <style>
+  <meta charset="UTF-8">  <style>
     body {
-      width: 300px;
+      width: 320px;
+      max-height: 500px;
       padding: 10px;
       font-family: system-ui, -apple-system, sans-serif;
+      overflow-y: auto;
     }
     .volume-control {
       display: flex;
@@ -21,14 +22,190 @@
       min-width: 3em;
       text-align: right;
     }
+    .domain-section {
+      margin: 15px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 5px;
+    }
+    .domain-info {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .exclude-button {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .include-button {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .exclude-button:hover {
+      background: #c82333;
+    }
+    .include-button:hover {
+      background: #218838;
+    }
+    .excluded-message {
+      color: #dc3545;
+      font-style: italic;
+      margin: 10px 0;
+    }
+    .settings-section {
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+      margin-top: 15px;
+    }
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      padding: 5px 0;
+      user-select: none;
+    }
+    .settings-header:hover {
+      background: #f0f0f0;
+      border-radius: 3px;
+      padding: 5px;
+      margin: -5px;
+    }
+    .settings-title {
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .expand-icon {
+      font-size: 12px;
+      transition: transform 0.2s ease;
+      color: #666;
+    }
+    .expand-icon.expanded {
+      transform: rotate(90deg);
+    }
+    .settings-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .settings-content.expanded {
+      max-height: 200px;
+      margin-top: 10px;
+    }
+    .excluded-list {
+      max-height: 150px;
+      overflow-y: auto;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      padding: 5px;
+      background: white;
+    }
+    .excluded-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .excluded-list::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+    .excluded-list::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 3px;
+    }
+    .excluded-list::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    .excluded-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      margin: 2px 0;
+      background: #f9f9f9;
+      border-radius: 2px;
+    }
+    .excluded-item:hover {
+      background: #e9e9e9;
+    }
+    .domain-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+    .remove-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 2px 6px;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+    .remove-btn:hover {
+      background: #c82333;
+    }
+    .no-domains {
+      color: #666;
+      font-style: italic;
+      text-align: center;
+      padding: 10px;
+    }
+    .domain-count {
+      font-size: 11px;
+      color: #888;
+      margin-left: 5px;
+    }
   </style>
 </head>
 <body>
   <h3>Domain Volume Control</h3>
-  <div class="volume-control">
-    <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="100">
-    <span id="volumeValue">100%</span>
+  
+  <!-- Current domain section -->
+  <div class="domain-section">
+    <div class="domain-info">Current domain: <span id="currentDomain"></span></div>
+    
+    <!-- Excluded message (hidden by default) -->
+    <div id="excludedMessage" class="excluded-message" style="display: none;">
+      Volume control is disabled for this domain.
+    </div>
+    
+    <!-- Volume control (shown by default) -->
+    <div id="volumeControl" class="volume-control">
+      <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="100">
+      <span id="volumeValue">100%</span>
+    </div>
+    
+    <!-- Domain control buttons -->
+    <button id="excludeButton" class="exclude-button" style="display: none;">Exclude this domain</button>
+    <button id="includeButton" class="include-button" style="display: none;">Include this domain</button>
   </div>
+    <!-- Settings section -->
+  <div class="settings-section">
+    <div class="settings-header" id="settingsHeader">
+      <div>
+        <span class="settings-title">Excluded Domains</span>
+        <span id="domainCount" class="domain-count">(0)</span>
+      </div>
+      <span class="expand-icon" id="expandIcon">▶</span>
+    </div>
+    <div class="settings-content" id="settingsContent">
+      <div id="excludedList" class="excluded-list"></div>
+    </div>
+  </div>
+  
   <script src="popup.js"></script>
 </body>
 </html>
