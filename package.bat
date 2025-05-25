@@ -2,7 +2,7 @@
 echo Packaging Firefox extension...
 
 set EXTENSION_NAME=domain-volume-control
-set VERSION=1.0
+set VERSION=1.1
 set OUTPUT_FILE=%EXTENSION_NAME%-v%VERSION%.xpi
 
 :: Remove existing package if it exists

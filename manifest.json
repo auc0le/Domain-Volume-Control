@@ -2,7 +2,7 @@
 {
   "manifest_version": 2,
   "name": "Domain Volume Control",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Control and remember volume settings per domain",
   "permissions": [
     "storage",
