@@ -83,7 +83,7 @@ async function updateUI() {
     
     // Load saved volume for this domain
     const result = await browser.storage.local.get(currentDomain);
-    const volume = result[currentDomain] || 100;
+    const volume = result[currentDomain] !== undefined ? result[currentDomain] : 100;
     document.getElementById('volumeSlider').value = volume;
     document.getElementById('volumeValue').textContent = volume + '%';
   }
