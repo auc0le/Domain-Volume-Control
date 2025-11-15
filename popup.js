@@ -65,10 +65,10 @@ async function updateExcludedList() {
 async function updateUI() {
   const excludedDomains = await getExcludedDomains();
   const isCurrentDomainExcluded = isDomainExcluded(currentDomain, excludedDomains);
-  
+
   // Update domain display
   document.getElementById('currentDomain').textContent = currentDomain;
-  
+
   // Show/hide appropriate elements
   if (isCurrentDomainExcluded) {
     document.getElementById('excludedMessage').style.display = 'block';
@@ -77,17 +77,22 @@ async function updateUI() {
     document.getElementById('includeButton').style.display = 'inline-block';
   } else {
     document.getElementById('excludedMessage').style.display = 'none';
-    document.getElementById('volumeControl').style.display = 'flex';
+    document.getElementById('volumeControl').style.display = 'block';
     document.getElementById('excludeButton').style.display = 'inline-block';
     document.getElementById('includeButton').style.display = 'none';
-    
+
     // Load saved volume for this domain
-    const result = await browser.storage.local.get(currentDomain);
-    const volume = result[currentDomain] !== undefined ? result[currentDomain] : 100;
+    const storageKey = currentDomain;
+    const stickyKey = currentDomain + '_sticky';
+    const result = await browser.storage.local.get([storageKey, stickyKey]);
+    const volume = result[storageKey] !== undefined ? result[storageKey] : 100;
+    const stickyVolume = result[stickyKey] !== undefined ? result[stickyKey] : (currentDomain === 'www.facebook.com');
+
     document.getElementById('volumeSlider').value = volume;
     document.getElementById('volumeValue').textContent = volume + '%';
+    document.getElementById('stickyVolumeCheckbox').checked = stickyVolume;
   }
-  
+
   // Update excluded domains list
   await updateExcludedList();
 }
@@ -158,21 +163,44 @@ document.getElementById('includeButton').addEventListener('click', async () => {
 document.getElementById('volumeSlider').addEventListener('input', async (e) => {
   const volume = parseInt(e.target.value);
   document.getElementById('volumeValue').textContent = volume + '%';
-  
+
   // Check if domain is excluded before proceeding
   const excludedDomains = await getExcludedDomains();
   if (isDomainExcluded(currentDomain, excludedDomains)) {
     return;
   }
-  
+
   // Save to storage
   browser.storage.local.set({
     [currentDomain]: volume
   });
-  
+
   // Send to content script
   browser.tabs.sendMessage(currentTabId, {
     command: 'setVolume',
     volume: volume / 100
+  });
+});
+
+// Handle sticky volume checkbox changes
+document.getElementById('stickyVolumeCheckbox').addEventListener('change', async (e) => {
+  const stickyVolume = e.target.checked;
+
+  // Check if domain is excluded before proceeding
+  const excludedDomains = await getExcludedDomains();
+  if (isDomainExcluded(currentDomain, excludedDomains)) {
+    return;
+  }
+
+  // Save to storage
+  const stickyKey = currentDomain + '_sticky';
+  browser.storage.local.set({
+    [stickyKey]: stickyVolume
+  });
+
+  // Send to content script
+  browser.tabs.sendMessage(currentTabId, {
+    command: 'setStickyVolume',
+    stickyVolume: stickyVolume
   });
 });

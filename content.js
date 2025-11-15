@@ -25,6 +25,7 @@ function initializeVolumeControl() {
   let mediaElements = new Set();
   let currentVolume = 0; // Start at 0% (muted) until storage loads to prevent loud spikes
   let volumeInitialized = false;
+  let stickyVolume = false; // Whether to aggressively enforce volume
   let gainNodes = new Set(); // Track all gain nodes so we can update them when volume changes
 
   // Intercept Web Audio API to control GainNode volumes
@@ -53,6 +54,7 @@ function initializeVolumeControl() {
 
       // Track this gain node
       gainNode._originalGainValue = 1; // Store the intended gain value
+      gainNode._lastExtensionGainChange = 0; // Track when we last changed the gain
       gainNodes.add(gainNode);
       console.log('[Volume Control] Tracking GainNode, total:', gainNodes.size);
 
@@ -66,12 +68,22 @@ function initializeVolumeControl() {
         Object.defineProperty(originalGainParam, 'value', {
           get: descriptor.get,
           set: function(value) {
-            // Store the original value Google wants to set
+            // Check if this is our own gain change (within 200ms of our last set)
+            const isOurChange = (Date.now() - gainNode._lastExtensionGainChange) < 200;
+
+            // Store the original value the site wants to set
             gainNode._originalGainValue = value;
-            // Apply our volume adjustment
-            const adjustedValue = value * currentVolume;
-            console.log('[Volume Control] GainNode value set from', value, 'to', adjustedValue, 'currentVolume:', currentVolume);
-            originalValueSetter.call(this, adjustedValue);
+
+            if (isOurChange) {
+              // This is us setting the gain, apply it directly
+              console.log('[Volume Control] GainNode - extension setting value to:', value);
+              originalValueSetter.call(this, value);
+            } else {
+              // External change - apply our volume multiplier
+              const adjustedValue = value * currentVolume;
+              console.log('[Volume Control] GainNode - adjusting from', value, 'to', adjustedValue, 'currentVolume:', currentVolume);
+              originalValueSetter.call(this, adjustedValue);
+            }
           },
           configurable: true
         });
@@ -105,16 +117,22 @@ function initializeVolumeControl() {
         // Check if this is our own volume change (within 200ms of our last set)
         const isOurChange = (Date.now() - this._lastExtensionVolumeChange) < 200;
 
-        // Allow our own volume changes
         if (isOurChange) {
           console.log('[Volume Control] Setting volume via extension to:', value);
           originalSet.call(this, value);
           return;
         }
 
-        // For other volume changes, maintain our volume setting
-        console.log('[Volume Control] Blocking external volume change from', value, 'to', currentVolume);
-        originalSet.call(this, currentVolume);
+        // External change (user or site)
+        // If sticky volume is enabled, enforce our volume
+        // If not, allow the change
+        if (stickyVolume) {
+          console.log('[Volume Control] Sticky mode - blocking external volume change from', value, 'to', currentVolume);
+          originalSet.call(this, currentVolume);
+        } else {
+          console.log('[Volume Control] Non-sticky mode - allowing external volume change to:', value);
+          originalSet.call(this, value);
+        }
       },
       configurable: true
     });
@@ -130,7 +148,6 @@ function initializeVolumeControl() {
 
     // Add loadedmetadata - fires very early, before video can play
     element.addEventListener('loadedmetadata', () => {
-      console.log('[Volume Control] loadedmetadata event, applying volume:', currentVolume);
       if (element.setExtensionVolume) {
         element.setExtensionVolume(currentVolume);
       }
@@ -138,32 +155,37 @@ function initializeVolumeControl() {
 
     // Add loadeddata - fires when first frame is loaded
     element.addEventListener('loadeddata', () => {
-      console.log('[Volume Control] loadeddata event, applying volume:', currentVolume);
       if (element.setExtensionVolume) {
         element.setExtensionVolume(currentVolume);
       }
     });
 
-    element.addEventListener('volumechange', (e) => {
-      // Ignore volume changes that WE are making (within 200ms of our last set)
-      const timeSinceOurChange = Date.now() - element._lastExtensionVolumeChange;
-      if (timeSinceOurChange < 200) {
-        return;
-      }
-
-      // Only handle trusted user events
-      if (!e.isTrusted) return;
-
-      const newVolume = Math.round(element.volume * 100);
-      browser.runtime.sendMessage({
-        command: 'volumeChanged',
-        volume: newVolume
+    // Only add extra enforcement events if sticky volume is enabled
+    if (stickyVolume) {
+      element.addEventListener('canplay', () => {
+        if (Math.abs(element.volume - currentVolume) > 0.01) {
+          if (element.setExtensionVolume) {
+            element.setExtensionVolume(currentVolume);
+          }
+        }
       });
-    });
+
+      element.addEventListener('playing', () => {
+        if (Math.abs(element.volume - currentVolume) > 0.01) {
+          if (element.setExtensionVolume) {
+            element.setExtensionVolume(currentVolume);
+          }
+        }
+      });
+    }
+
+    // Note: We intentionally do NOT listen to volumechange to update the stored volume
+    // This allows native player controls to temporarily adjust volume for a single video
+    // without changing the domain's default volume setting
 
     // Ensure volume is set even if the video is loaded later
     element.addEventListener('loadstart', () => {
-      // Verify our setExtensionVolume method is still there
+      console.log('[Volume Control] loadstart - new video loading');
       if (!element.setExtensionVolume) {
         mediaElements.delete(element);
         trackMediaElement(element);
@@ -172,54 +194,41 @@ function initializeVolumeControl() {
       element.setExtensionVolume(currentVolume);
     });
 
-    element.addEventListener('play', () => {
-      if (!element.setExtensionVolume) {
-        mediaElements.delete(element);
-        trackMediaElement(element);
-        return;
-      }
-      element.setExtensionVolume(currentVolume);
-    });
-
-    element.addEventListener('seeked', () => {
-      if (!element.setExtensionVolume) {
-        mediaElements.delete(element);
-        trackMediaElement(element);
-        return;
-      }
-      element.setExtensionVolume(currentVolume);
-    });
-
-    // Also add a canplay event to handle when video is ready
-    element.addEventListener('canplay', () => {
-      if (Math.abs(element.volume - currentVolume) > 0.01) {
-        if (element.setExtensionVolume) {
-          element.setExtensionVolume(currentVolume);
+    // Only add aggressive event handlers if sticky volume is enabled
+    if (stickyVolume) {
+      element.addEventListener('play', () => {
+        if (!element.setExtensionVolume) {
+          mediaElements.delete(element);
+          trackMediaElement(element);
+          return;
         }
-      }
-    });
+        element.setExtensionVolume(currentVolume);
+      });
 
-    // Add playing event - fires when playback starts after being paused or delayed
-    element.addEventListener('playing', () => {
-      if (Math.abs(element.volume - currentVolume) > 0.01) {
-        if (element.setExtensionVolume) {
-          element.setExtensionVolume(currentVolume);
+      element.addEventListener('seeked', () => {
+        if (!element.setExtensionVolume) {
+          mediaElements.delete(element);
+          trackMediaElement(element);
+          return;
         }
-      }
-    });
+        element.setExtensionVolume(currentVolume);
+      });
 
-    // Monitor volume property periodically while video is playing
-    element.addEventListener('timeupdate', function volumeMonitor() {
-      // Only check occasionally (every ~2 seconds)
-      if (!this._lastVolumeCheck || Date.now() - this._lastVolumeCheck > 2000) {
-        this._lastVolumeCheck = Date.now();
-        if (Math.abs(this.volume - currentVolume) > 0.01) {
-          if (this.setExtensionVolume) {
-            this.setExtensionVolume(currentVolume);
+      // Monitor volume property periodically while video is playing
+      element.addEventListener('timeupdate', function volumeMonitor() {
+        // Only check occasionally (every ~2 seconds)
+        if (!this._lastVolumeCheck || Date.now() - this._lastVolumeCheck > 2000) {
+          this._lastVolumeCheck = Date.now();
+
+          if (Math.abs(this.volume - currentVolume) > 0.01) {
+            console.log('[Volume Control] Sticky mode - enforcing volume, drift from', this.volume, 'to', currentVolume);
+            if (this.setExtensionVolume) {
+              this.setExtensionVolume(currentVolume);
+            }
           }
         }
-      }
-    });
+      });
+    }
   }
 
   // Watch for new media elements more aggressively
@@ -282,10 +291,14 @@ function initializeVolumeControl() {
   // Function to load and apply volume settings
   function loadVolumeSettings(domainToUse) {
     console.log('[Volume Control] Initializing for domain:', domainToUse, isInIframe ? (isCrossOriginIframe ? '(cross-origin iframe)' : '(iframe)') : '(main page)');
-    browser.storage.local.get(domainToUse).then(result => {
+    const stickyKey = domainToUse + '_sticky';
+    browser.storage.local.get([domainToUse, stickyKey]).then(result => {
       // Fix: Handle 0 volume correctly (0 is falsy, so use explicit undefined check)
       const volume = result[domainToUse] !== undefined ? result[domainToUse] : 100;
-      console.log('[Volume Control] Loaded volume from storage:', volume, 'for domain:', domainToUse);
+      // Default to sticky volume for facebook.com
+      stickyVolume = result[stickyKey] !== undefined ? result[stickyKey] : (domainToUse === 'www.facebook.com');
+
+      console.log('[Volume Control] Loaded volume from storage:', volume, 'sticky:', stickyVolume, 'for domain:', domainToUse);
       currentVolume = volume / 100;
       volumeInitialized = true;
 
@@ -326,6 +339,13 @@ function initializeVolumeControl() {
       console.log('[Volume Control] Received setVolume command:', message.volume);
       setPageVolume(message.volume);
     }
+
+    if (message.command === 'setStickyVolume') {
+      console.log('[Volume Control] Received setStickyVolume command:', message.stickyVolume);
+      stickyVolume = message.stickyVolume;
+      // Note: Changing sticky volume doesn't reapply to existing elements
+      // It only affects newly tracked elements and future enforcement behavior
+    }
   });
 
   function setPageVolume(volume) {
@@ -351,14 +371,13 @@ function initializeVolumeControl() {
 
     // Update Web Audio API GainNode values
     for (const gainNode of gainNodes) {
+      // Mark that extension is setting this
+      gainNode._lastExtensionGainChange = Date.now();
+
       if (gainNode._originalGainValue !== undefined) {
         const newValue = gainNode._originalGainValue * currentVolume;
         console.log('[Volume Control] Updating GainNode from', gainNode.gain.value, 'to', newValue);
-        // We need to use the original setter to bypass our interception
-        const descriptor = Object.getOwnPropertyDescriptor(gainNode.gain.__proto__, 'value');
-        if (descriptor && descriptor.set) {
-          descriptor.set.call(gainNode.gain, newValue);
-        }
+        gainNode.gain.value = newValue; // Use our intercepted setter
       }
     }
   }

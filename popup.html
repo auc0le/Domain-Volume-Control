@@ -181,13 +181,23 @@
     <div id="excludedMessage" class="excluded-message" style="display: none;">
       Volume control is disabled for this domain.
     </div>
-    
+
     <!-- Volume control (shown by default) -->
-    <div id="volumeControl" class="volume-control">
-      <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="100">
-      <span id="volumeValue">100%</span>
+    <div id="volumeControl">
+      <div class="volume-control">
+        <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="100">
+        <span id="volumeValue">100%</span>
+      </div>
+
+      <!-- Sticky volume checkbox -->
+      <div style="margin: 10px 0; font-size: 12px;">
+        <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+          <input type="checkbox" id="stickyVolumeCheckbox" style="cursor: pointer;">
+          <span>Sticky Volume (prevents sites from changing volume)</span>
+        </label>
+      </div>
     </div>
-    
+
     <!-- Domain control buttons -->
     <button id="excludeButton" class="exclude-button" style="display: none;">Exclude this domain</button>
     <button id="includeButton" class="include-button" style="display: none;">Include this domain</button>
